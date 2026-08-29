@@ -46,6 +46,7 @@ Item {
 
   readonly property var settings: pluginApi?.pluginSettings || ({})
   readonly property bool autoStartDaemon: settings.autoStartDaemon !== false
+  readonly property bool suppressOverlay: settings.suppressOverlay !== false
 
   signal transcriptUpdated
   signal listUpdated
@@ -296,6 +297,37 @@ Item {
       root.loadTranscript()
       reloadSoon.restart()
     }
+    // The daemon auto-opens aside's native overlay for every query.
+    // Hide it again so only this widget's panel shows the conversation.
+    if (root.suppressOverlay) {
+      overlayHide1.restart()
+      overlayHide2.restart()
+    }
+  }
+
+  Timer {
+    id: overlayHide1
+    interval: 600
+    onTriggered: root.hideAsideOverlay()
+  }
+
+  Timer {
+    id: overlayHide2
+    interval: 1600
+    onTriggered: root.hideAsideOverlay()
+  }
+
+  function hideAsideOverlay() {
+    var p = [root.pythonBin, root.bridge, "overlay", "hide"]
+    if (overlayHideProc.command.join(" ") !== p.join(" "))
+      overlayHideProc.command = p
+    overlayHideProc.running = true
+  }
+
+  Process {
+    id: overlayHideProc
+    running: false
+    command: []
   }
 
   // ── Voice (one-shot capture, aside STT) ───────────────────────
@@ -500,17 +532,22 @@ Item {
     }
   }
 
-  // ── Screenshot capture (region or fullscreen) ─────────────────
+  // ── Screenshot capture (region or fullscreen) ───────────────
+  // Closes the panel first so it cannot overlap or steal input from
+  // slurp's selection UI, then reopens it with the image attached.
   function captureScreenshot() {
     var out = "/tmp/aside-widget-shot-" + Date.now() + ".png"
-    var cmd
-    if (root.settings.fullscreenScreenshot === true)
-      cmd = "grim '" + out + "'"
-    else
-      cmd = "grim -g \"$(slurp -d)\" '" + out + "'"
+    var sel = root.settings.fullscreenScreenshot === true ? "" : "-g \"$(slurp -d)\" "
     shotProc.outputPath = out
-    shotProc.command = ["sh", "-c", cmd]
+    shotProc.command = ["sh", "-c", "grim " + sel + "'" + out + "'"]
+    if (pluginApi)
+      pluginApi.withCurrentScreen(screen => pluginApi.closePanel(screen))
     shotProc.running = true
+  }
+
+  function reopenPanel() {
+    if (pluginApi)
+      Qt.callLater(() => pluginApi.withCurrentScreen(screen => pluginApi.openPanel(screen)))
   }
 
   Process {
@@ -523,13 +560,19 @@ Item {
     }
     property string lastError: ""
     onExited: function (code) {
+      var err = (shotProc.lastError + "").trim()
       if (code === 0) {
         root.pendingImage = shotProc.outputPath
+        root.reopenPanel()
         ToastService.showNotice("Aside", "Screenshot attached — add a prompt & send", "screenshot")
       } else {
-        // slurp cancelled or grim failed
-        if ((shotProc.lastError + "").indexOf("selection cancelled") === -1)
-          Logger.d("Aside", "screenshot cancelled/failed")
+        root.reopenPanel()
+        Logger.i("Aside", "screenshot failed:", err || ("exit code " + code))
+        if (err.indexOf("selection cancelled") !== -1 || err === "") {
+          ToastService.showNotice("Aside", "Screenshot cancelled", "screenshot")
+        } else {
+          ToastService.showError("Aside", "Screenshot failed: " + err)
+        }
       }
     }
   }

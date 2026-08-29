@@ -235,6 +235,26 @@ def cmd_action(a: argparse.Namespace) -> None:
     print("ok")
 
 
+def cmd_overlay(a: argparse.Namespace) -> None:
+    """Send a command to the aside overlay socket (aside-overlay.sock)."""
+    cmds = {"hide": {"cmd": "clear"}}
+    if a.op not in cmds:
+        raise SystemExit(f"unknown overlay op {a.op}")
+    path = socket_path("aside-overlay.sock")
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect(str(path))
+        s.sendall((json.dumps(cmds[a.op]) + "\n").encode("utf-8"))
+        s.shutdown(socket.SHUT_WR)
+        s.close()
+        print("ok")
+    except (FileNotFoundError, ConnectionRefusedError, OSError) as e:
+        # overlay not running -> nothing to hide
+        print(f"overlay not reachable: {e}", file=sys.stderr)
+        raise SystemExit(0)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -262,6 +282,10 @@ def main() -> None:
     p = sub.add_parser("action", help="ping | cancel | toggle-tts | stop-tts")
     p.add_argument("name")
     p.set_defaults(func=cmd_action)
+
+    p = sub.add_parser("overlay", help="hide — hide the aside overlay window")
+    p.add_argument("op")
+    p.set_defaults(func=cmd_overlay)
 
     a = ap.parse_args()
     a.func(a)

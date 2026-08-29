@@ -23,6 +23,7 @@
     "defaultSettings": {
       "autoStartDaemon": true,
       "fullscreenScreenshot": false,
+      "suppressOverlay": true,
       "imageDefaultPrompt": "Describe this image.",
       "showModelInBar": false
     }

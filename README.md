@@ -13,11 +13,16 @@ desktop assistant — directly into your shell.
 - **Conversation panel** — full transcript of the active aside conversation
   with markdown rendering, auto-scroll, and a thinking/stop indicator.
 - **Query** — type & send with Enter (Shift+Enter for newline).
-- **Voice input** — one-shot mic capture through aside's STT
-  (`aside query --mic` / `aside reply --mic <id>`).
-- **Screenshot input** — select a screen region with slurp; the image is
-  downscaled & optimized and attached to your next message.
+- **Overlay suppression** — aside's native overlay normally pops up for every
+  query; the widget hides it again so only the panel shows the reply
+  (configurable, voice capture still uses the overlay for feedback).
+- **Screenshot input** — select a screen region with slurp; the panel closes
+  while selecting and reopens with the image attached. The image is
+  downscaled & optimized for aside's daemon socket.
 - **Clipboard image input** — attach an image straight from the clipboard.
+- **Voice input** — one-shot mic capture through aside's STT
+  (`aside query --mic` / `aside reply --mic <id>`); the aside overlay shows
+  live transcription feedback.
 - **History** — browse, pin, and delete recent conversations.
 - **Extras** — new chat, TTS toggle, open the conversation in aside's native
   overlay, automatic daemon startup.
@@ -74,7 +79,8 @@ Available IPC functions: `toggle`, `query <text>`, `voice`, `screenshot`,
 
 ## Notes
 
-- The screenshot is attached to the *next* message: take the shot, add a
-  prompt (or none — the "default image prompt" setting is used), send.
-- The panel stays open while capturing; it will appear in fullscreen
-  captures. Use region capture or close the panel if you don't want that.
+- The screenshot closes the panel, opens slurp's region picker, then reopens
+  the panel with the image attached — add a prompt (or none — the "default
+  image prompt" setting is used) and send.
+- With "Hide aside overlay on send" enabled the native overlay may flash
+  briefly when a query starts; it is hidden again automatically.

@@ -25,6 +25,17 @@ ColumnLayout {
 
   NToggle {
     Layout.fillWidth: true
+    label: "Hide aside overlay on send"
+    description: "Aside's native overlay pops up for every query. When on, it is hidden again after sending from this widget so only the panel shows the reply. Voice capture still uses the overlay."
+    checked: pluginApi?.pluginSettings?.suppressOverlay !== false
+    onToggled: (checked) => {
+                 pluginApi.pluginSettings.suppressOverlay = checked
+                 pluginApi.saveSettings()
+               }
+  }
+
+  NToggle {
+    Layout.fillWidth: true
     label: "Fullscreen screenshots"
     description: "Off: select a region with slurp. On: capture the entire screen."
     checked: pluginApi?.pluginSettings?.fullscreenScreenshot === true
