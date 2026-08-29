@@ -1,0 +1,30 @@
+{
+  "id": "aside",
+  "name": "Aside",
+  "version": "1.0.0",
+  "minNoctaliaVersion": "4.4.0",
+  "author": "MartianHannah <git@rennersh.de>",
+  "license": "MIT",
+  "description": "Aside LLM assistant in your bar: query / conversation view, one-shot voice input, screenshot & clipboard image attachments. Requires the aside daemon (pacman -S aside).",
+  "tags": [
+    "Bar",
+    "Utility"
+  ],
+  "entryPoints": {
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml",
+    "settings": "Settings.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "defaultSettings": {
+      "autoStartDaemon": true,
+      "fullscreenScreenshot": false,
+      "imageDefaultPrompt": "Describe this image.",
+      "showModelInBar": false
+    }
+  }
+}
