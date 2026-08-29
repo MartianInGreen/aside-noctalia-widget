@@ -535,9 +535,11 @@ Item {
   // ── Screenshot capture (region or fullscreen) ───────────────
   // Closes the panel first so it cannot overlap or steal input from
   // slurp's selection UI, then reopens it with the image attached.
+  // NOTE: slurp must get /dev/null on stdin — quickshell's Process
+  // pipes stdin, and slurp blocks forever on an open pipe (no UI).
   function captureScreenshot() {
     var out = "/tmp/aside-widget-shot-" + Date.now() + ".png"
-    var sel = root.settings.fullscreenScreenshot === true ? "" : "-g \"$(slurp -d)\" "
+    var sel = root.settings.fullscreenScreenshot === true ? "" : "-g \"$(slurp -d </dev/null)\" "
     shotProc.outputPath = out
     shotProc.command = ["sh", "-c", "grim " + sel + "'" + out + "'"]
     if (pluginApi)
