@@ -261,7 +261,7 @@ Item {
         anchors.fill: parent
         spacing: Style.marginM
         clip: true
-        model: mainInstance?.messages ?? []
+        model: mainInstance?.displayMessages ?? []
         boundsBehavior: Flickable.StopAtBounds
 
         delegate: Item {
@@ -332,7 +332,7 @@ Item {
 
       // ── Empty state ──────────────────────────────────────────
       ColumnLayout {
-        visible: (mainInstance?.messages?.length ?? 0) === 0
+        visible: (mainInstance?.displayMessages?.length ?? 0) === 0
         anchors.centerIn: parent
         spacing: Style.marginS
 

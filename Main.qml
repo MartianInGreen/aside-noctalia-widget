@@ -42,7 +42,23 @@ Item {
   property var messages: []                // parsed transcript of currentConvId
   property var convList: []                // [{id, mtime, messages, preview}]
   property string pendingImage: ""         // path of image attached to next message
-  property bool forceNewChat: false        // next send starts a fresh conversation
+  property bool newChatMode: false         // viewing a not-yet-started conversation
+
+  // Optimistically shown sent message: aside only writes the conversation
+  // JSON when a query FINISHES, so the sent text is displayed locally until
+  // the file catches up (then it is dropped to avoid duplicates).
+  property string pendingUserText: ""
+  property bool pendingUserImage: false
+
+  readonly property var displayMessages: {
+    if (pendingUserText === "")
+      return messages
+    return messages.concat([{
+                              "role": "user",
+                              "text": pendingUserText,
+                              "image": pendingUserImage
+                            }])
+  }
 
   readonly property var settings: pluginApi?.pluginSettings || ({})
   readonly property bool autoStartDaemon: settings.autoStartDaemon !== false
@@ -97,8 +113,9 @@ Item {
     try {
       var id = JSON.parse(raw).conversation_id || ""
       if (id && id !== root.daemonConvId) {
+        Logger.i("Aside", "daemon switched conversation:", id.substring(0, 7))
         root.daemonConvId = id
-        root.forceNewChat = false
+        root.newChatMode = false
         if (!root.pinned)
           root.loadTranscript()
         root.refreshList()
@@ -115,17 +132,43 @@ Item {
     onFileChanged: convFile.reload()
     onLoaded: root.parseTranscript()
     onLoadFailed: function (err) {
-      root.messages = []
+      root.messages = applyOptimistic([])
       root.transcriptUpdated()
     }
   }
 
   function loadTranscript() {
-    // path assignment triggers onPathChanged -> reload -> parseTranscript
+    // A brand-new (not yet started) conversation shows an empty view —
+    // never fall back to the daemon's previous conversation.
+    if (root.newChatMode) {
+      root.messages = []
+      root.transcriptUpdated()
+      return
+    }
     if (convFile.path !== root.currentConvPath)
       convFile.path = root.currentConvPath
     else if (root.currentConvPath !== "")
       convFile.reload()
+  }
+
+  // Reconcile the optimistic sent message with the on-disk transcript.
+  // If the transcript already contains it (query finished), drop the flag;
+  // otherwise keep showing it below the stored messages.
+  function applyOptimistic(out) {
+    if (root.pendingUserText === "")
+      return out
+    for (var i = out.length - 1; i >= 0 && i >= out.length - 3; i--) {
+      if (out[i].role === "user" && out[i].text === root.pendingUserText) {
+        root.pendingUserText = ""
+        root.pendingUserImage = false
+        return out
+      }
+    }
+    return out.concat([{
+                         "role": "user",
+                         "text": root.pendingUserText,
+                         "image": root.pendingUserImage
+                       }])
   }
 
   function parseTranscript() {
@@ -165,7 +208,7 @@ Item {
                    "image": hasImage
                  })
       }
-      root.messages = out
+      root.messages = applyOptimistic(out)
       root.transcriptUpdated()
     } catch (e) {
       Logger.w("Aside", "transcript parse failed:", e)
@@ -176,7 +219,9 @@ Item {
   function newChat() {
     root.pinned = false
     root.pinnedId = ""
-    root.forceNewChat = true
+    root.newChatMode = true
+    root.pendingUserText = ""
+    root.pendingUserImage = false
     root.messages = []
     root.transcriptUpdated()
   }
@@ -186,12 +231,18 @@ Item {
       return
     root.pinned = true
     root.pinnedId = id
+    root.newChatMode = false
+    root.pendingUserText = ""
+    root.pendingUserImage = false
     root.loadTranscript()
   }
 
   function unpin() {
     root.pinned = false
     root.pinnedId = ""
+    root.newChatMode = false
+    root.pendingUserText = ""
+    root.pendingUserImage = false
     root.loadTranscript()
   }
 
@@ -236,13 +287,15 @@ Item {
       args.push("--image", root.pendingImage)
       args.push("--default-prompt", root.settings.imageDefaultPrompt || "Describe this image.")
     }
-    if (root.forceNewChat || (root.pinned && root.currentConvId === "")) {
+    if (root.newChatMode || (root.pinned && root.currentConvId === "")) {
       args.push("--new")
     } else if (root.pinned && root.pinnedId !== "") {
       args.push("--conversation", root.pinnedId)
     }
 
     Logger.i("Aside", "send:", t.substring(0, 60), root.pendingImage !== "" ? "+image" : "")
+    root.pendingUserText = t
+    root.pendingUserImage = root.pendingImage !== ""
     sendProc.command = args
     sendProc.running = true
     return true
@@ -285,18 +338,17 @@ Item {
   }
 
   function sendFinished(ok) {
-    if (!ok)
+    if (!ok) {
+      // bridge failed — drop the optimistic message
+      root.pendingUserText = ""
+      root.pendingUserImage = false
       return
+    }
     root.pendingImage = ""
     root.pendingImageCleared()
-    // Optimistically switch view: user message lands in the conv file
-    if (root.forceNewChat) {
-      root.pinned = false
-      reloadSoon.restart()
-    } else {
-      root.loadTranscript()
-      reloadSoon.restart()
-    }
+    // No transcript reload here: aside writes the conv JSON only when the
+    // query finishes, and the file watcher + parseLast handle the switch.
+    reloadSoon.restart()
     // The daemon auto-opens aside's native overlay for every query.
     // Hide it again so only this widget's panel shows the conversation.
     if (root.suppressOverlay) {
@@ -471,13 +523,17 @@ Item {
     onTriggered: root.refreshList()
   }
 
-  // React when a new conversation file shows up mid-query
+  // Follow the daemon's most recent conversation. When a new conversation is
+  // started ("New chat" + send), its file appears here as soon as the user
+  // message is written, so the view switches immediately — no waiting for the
+  // response. (Not gated on busy: status detection may lag.)
   onConvListChanged: {
-    if (!root.busy || root.pinned)
+    if (root.pinned)
       return
     if (root.convList.length > 0 && root.convList[0].id && root.convList[0].id !== root.currentConvId) {
+      Logger.i("Aside", "following newest conversation:", root.convList[0].id.substring(0, 7))
       root.daemonConvId = root.convList[0].id
-      root.forceNewChat = false
+      root.newChatMode = false
       root.loadTranscript()
     }
   }
