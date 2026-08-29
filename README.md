@@ -84,3 +84,7 @@ Available IPC functions: `toggle`, `query <text>`, `voice`, `screenshot`,
   image prompt" setting is used) and send.
 - With "Hide aside overlay on send" enabled the native overlay may flash
   briefly when a query starts; it is hidden again automatically.
+
+## License
+
+[MIT](LICENSE) © MartianHannah
